@@ -6,9 +6,11 @@ from flask_cors import CORS
 import os
 import traceback
 import sys
-from download_models import download_models
-download_models()
-
+try:
+    from download_models import download_models
+    download_models()
+except Exception as e:
+    print(f"❌ Model download failed: {str(e)}")
 app = Flask(__name__)
 CORS(app)  # Enable CORS for API calls
 
@@ -567,7 +569,11 @@ def internal_error(error):
         'message': 'Check server console for detailed error information'
     }), 500
 
-MODELS = load_models()
+try:
+    MODELS = load_models()
+except Exception as e:
+    print(f"❌ Model loading failed: {str(e)}")
+    MODELS = None
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8000))
