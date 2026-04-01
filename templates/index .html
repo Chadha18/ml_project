@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PetroML — Petrophysical Prediction</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d0f14;
+      --surface:  #141720;
+      --surface2: #1c2030;
+      --border:   #252a3a;
+      --gold:     #e8a838;
+      --gold2:    #f5c96a;
+      --cyan:     #3ecfcf;
+      --red:      #e05252;
+      --green:    #4ecb71;
+      --text:     #d4daf0;
+      --muted:    #5a637a;
+      --mono:     'Space Mono', monospace;
+      --sans:     'Syne', sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ─── NOISE TEXTURE OVERLAY ─── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      background-size: 180px;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+    }
+
+    /* ─── STRATA LINES BG ─── */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 48px,
+        rgba(232,168,56,0.03) 48px,
+        rgba(232,168,56,0.03) 49px
+      );
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .page-wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ─── HEADER ─── */
+    header {
+      padding: 48px 0 40px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 40px;
+      animation: fadeDown 0.6s ease both;
+    }
+
+    .logo-block h1 {
+      font-family: var(--sans);
+      font-size: 2.4rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #fff;
+      line-height: 1;
+    }
+
+    .logo-block h1 span { color: var(--gold); }
+
+    .logo-block p {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      margin-top: 8px;
+      text-transform: uppercase;
+    }
+
+    .status-bar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--surface);
+    }
+
+    .status-pill:hover { border-color: var(--gold); color: var(--gold); }
+
+    .status-pill .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+
+    .status-pill.online .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .status-pill.offline .dot { background: var(--red); }
+
+    /* ─── LAYOUT ─── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 28px;
+      align-items: start;
+    }
+
+    @media (max-width: 860px) {
+      .main-grid { grid-template-columns: 1fr; }
+      header { flex-direction: column; gap: 20px; }
+      .status-bar { justify-content: flex-start; }
+    }
+
+    /* ─── PANELS ─── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      animation: fadeUp 0.5s ease both;
+    }
+
+    .panel:nth-child(2) { animation-delay: 0.08s; }
+
+    .panel-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .panel-icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: rgba(232,168,56,0.12);
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .panel-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    .panel-body { padding: 24px; }
+
+    /* ─── INPUT GRID ─── */
+    .input-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    @media (max-width: 560px) { .input-grid { grid-template-columns: 1fr; } }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .field label {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .field label span {
+      color: var(--gold);
+      margin-left: 4px;
+    }
+
+    .field input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 14px;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--text);
+      width: 100%;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+
+    .field input:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px rgba(232,168,56,0.12);
+    }
+
+    .field input::placeholder { color: var(--muted); }
+
+    /* ─── ACTIONS ─── */
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 22px;
+      border-radius: 8px;
+      border: none;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .btn-primary {
+      background: var(--gold);
+      color: #0d0f14;
+      flex: 1;
+      justify-content: center;
+    }
+
+    .btn-primary:hover { background: var(--gold2); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(232,168,56,0.3); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
+
+    /* ─── SIDEBAR ─── */
+    .sidebar { display: flex; flex-direction: column; gap: 20px; }
+
+    /* ─── DEBUG TERMINAL ─── */
+    .terminal {
+      background: #080a0e;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .terminal-bar {
+      padding: 10px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .terminal-dots { display: flex; gap: 5px; }
+    .terminal-dots span {
+      width: 10px; height: 10px; border-radius: 50%;
+    }
+    .terminal-dots span:nth-child(1) { background: #e05252; }
+    .terminal-dots span:nth-child(2) { background: #e8a838; }
+    .terminal-dots span:nth-child(3) { background: #4ecb71; }
+
+    .terminal-label {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-left: 4px;
+    }
+
+    .terminal-body {
+      padding: 14px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: #6be585;
+      min-height: 80px;
+      max-height: 160px;
+      overflow-y: auto;
+      line-height: 1.6;
+    }
+
+    .terminal-body .log-time { color: var(--muted); }
+    .terminal-body .log-msg { color: #6be585; }
+    .terminal-body .log-err { color: var(--red); }
+
+    /* ─── RESULTS PANEL ─── */
+    .results-panel {
+      animation: fadeUp 0.4s ease both;
+    }
+
+    .result-hidden { display: none; }
+
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+    }
+
+    .metric-row:last-child { border-bottom: none; }
+
+    .metric-label { color: var(--muted); font-size: 0.72rem; }
+    .metric-value { color: var(--text); }
+
+    .metric-avg {
+      margin-top: 14px;
+      padding: 12px 16px;
+      background: rgba(232,168,56,0.08);
+      border: 1px solid rgba(232,168,56,0.25);
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+    }
+
+    .metric-avg .avg-label { color: var(--gold); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+    .metric-avg .avg-val { color: var(--gold2); font-weight: 700; font-size: 1rem; }
+
+    .result-block { margin-bottom: 24px; }
+    .result-block-title {
+      font-size: 0.7rem;
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .result-block-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .error-box {
+      padding: 16px;
+      background: rgba(224,82,82,0.08);
+      border: 1px solid rgba(224,82,82,0.3);
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--red);
+    }
+
+    .success-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      border-radius: 100px;
+      background: rgba(78,203,113,0.1);
+      border: 1px solid rgba(78,203,113,0.3);
+      color: var(--green);
+      margin-bottom: 20px;
+    }
+
+    /* ─── SPINNER ─── */
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: var(--bg);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+
+    /* ─── MODEL INFO ─── */
+    .model-info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .model-info-row .k { color: var(--muted); }
+    .model-info-row .v { color: var(--cyan); }
+
+    /* ─── ANIMATIONS ─── */
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ─── SCROLLBAR ─── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-block">
+      <h1>Petro<span>ML</span></h1>
+      <p>Petrophysical Prediction Engine // ML v2.0</p>
+    </div>
+    <div class="status-bar">
+      <button class="status-pill" id="healthPill" onclick="checkHealth()">
+        <span class="dot"></span>
+        System Health
+      </button>
+      <button class="status-pill" onclick="getModelInfo()">
+        <span class="dot" style="background:var(--cyan);box-shadow:0 0 6px var(--cyan)"></span>
+        Model Info
+      </button>
+    </div>
+  </header>
+
+  <div class="main-grid">
+
+    <!-- LEFT: INPUT FORM -->
+    <div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-icon">⛏</div>
+          <span class="panel-title">Input Parameters</span>
+        </div>
+        <div class="panel-body">
+          <form id="predictionForm">
+            <div class="input-grid">
+
+              <div class="field">
+                <label>Depth <span>ft</span></label>
+                <input type="number" name="Depth" step="0.01" required placeholder="e.g. 3500.5">
+              </div>
+
+              <div class="field">
+                <label>RxoRt <span>Ω⋅m</span></label>
+                <input type="number" name="RxoRt" step="0.01" required placeholder="e.g. 2.5">
+              </div>
+
+              <div class="field">
+                <label>RILD <span>Ω⋅m</span></label>
+                <input type="number" name="RILD" step="0.01" required placeholder="e.g. 15.7">
+              </div>
+
+              <div class="field">
+                <label>MN <span>API</span></label>
+                <input type="number" name="MN" step="0.01" required placeholder="e.g. 25.3">
+              </div>
+
+              <div class="field">
+                <label>GR <span>API</span></label>
+                <input type="number" name="GR" step="0.01" required placeholder="e.g. 85.2">
+              </div>
+
+              <div class="field">
+                <label>CNLS <span>p.u.</span></label>
+                <input type="number" name="CNLS" step="0.01" required placeholder="e.g. 0.15">
+              </div>
+
+              <div class="field">
+                <label>RHOC <span>g/cm³</span></label>
+                <input type="number" name="RHOC" step="0.01" required placeholder="e.g. 2.35">
+              </div>
+
+            </div>
+
+            <div class="actions">
+              <button type="submit" class="btn btn-primary" id="predictBtn">
+                Run Prediction
+              </button>
+              <button type="button" class="btn btn-ghost" onclick="loadSampleData()">Sample</button>
+              <button type="button" class="btn btn-ghost" onclick="clearForm()">Clear</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- RESULTS (below form on mobile, stays left col) -->
+      <div id="resultsWrapper" class="result-hidden" style="margin-top:20px;">
+        <div class="panel results-panel">
+          <div class="panel-header">
+            <div class="panel-icon">📊</div>
+            <span class="panel-title">Prediction Results</span>
+          </div>
+          <div class="panel-body" id="resultsBody"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT SIDEBAR -->
+    <div class="sidebar">
+
+      <!-- DEBUG TERMINAL -->
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dots">
+            <span></span><span></span><span></span>
+          </div>
+          <span class="terminal-label">debug // console</span>
+        </div>
+        <div class="terminal-body" id="terminalBody">
+          <div><span class="log-time">--:--:-- </span><span class="log-msg">Initialising PetroML...</span></div>
+        </div>
+      </div>
+
+      <!-- MODEL INFO PANEL -->
+      <div class="panel" id="modelInfoPanel" style="display:none; animation-delay:0.15s">
+        <div class="panel-header">
+          <div class="panel-icon">🧠</div>
+          <span class="panel-title">Model Registry</span>
+        </div>
+        <div class="panel-body" id="modelInfoBody"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ─── TERMINAL LOG ─── */
+  function log(msg, type = 'msg') {
+    console.log('DEBUG:', msg);
+    const body = document.getElementById('terminalBody');
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const div = document.createElement('div');
+    div.innerHTML = `<span class="log-time">${time} </span><span class="log-${type}">${msg}</span>`;
+    body.appendChild(div);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  /* ─── SAFE GET ─── */
+  function safeGet(obj, path, def = null) {
+    try {
+      return path.split('.').reduce((o, k) => o && o[k], obj) ?? def;
+    } catch { return def; }
+  }
+
+  /* ─── HEALTH CHECK ─── */
+  async function checkHealth() {
+    log('Checking system health...');
+    const pill = document.getElementById('healthPill');
+    try {
+      const res = await fetch('/api/health');
+      const data = await res.json();
+      if (res.ok) {
+        const status = safeGet(data, 'status', 'unknown');
+        const models = safeGet(data, 'available_models', []);
+        pill.classList.add('online');
+        log(`System ${status} — ${models.length} models: ${models.join(', ')}`);
+      } else {
+        pill.classList.add('offline');
+        log('Health check failed: ' + JSON.stringify(data), 'err');
+      }
+    } catch (e) {
+      pill.classList.add('offline');
+      log('Health check error: ' + e.message, 'err');
+    }
+  }
+
+  /* ─── MODEL INFO ─── */
+  async function getModelInfo() {
+    log('Fetching model registry...');
+    try {
+      const res = await fetch('/api/model-info');
+      const data = await res.json();
+      if (res.ok) {
+        const features = safeGet(data, 'feature_order', []);
+        const loaded   = safeGet(data, 'loaded_models', []);
+        const count    = safeGet(data, 'model_count', 0);
+        log(`Registry: ${count} models loaded`);
+
+        const panel = document.getElementById('modelInfoPanel');
+        const body  = document.getElementById('modelInfoBody');
+        panel.style.display = 'block';
+
+        body.innerHTML = `
+          <div class="model-info-row"><span class="k">Models Loaded</span><span class="v">${count}</span></div>
+          <div class="model-info-row"><span class="k">Model IDs</span><span class="v">${loaded.join(', ') || '—'}</span></div>
+          <div class="model-info-row"><span class="k">Feature Order</span><span class="v">${features.join(', ') || '—'}</span></div>
+        `;
+      } else {
+        log('Model info error: ' + JSON.stringify(data), 'err');
+      }
+    } catch (e) {
+      log('Model info error: ' + e.message, 'err');
+    }
+  }
+
+  /* ─── SAMPLE DATA ─── */
+  function loadSampleData() {
+    const sample = { Depth: 3545.25, RxoRt: 2.15, RILD: 12.8, MN: 22.5, GR: 78.3, CNLS: 0.18, RHOC: 2.42 };
+    Object.entries(sample).forEach(([k, v]) => {
+      const el = document.querySelector(`input[name="${k}"]`);
+      if (el) el.value = v;
+    });
+    log('Sample data loaded');
+  }
+
+  /* ─── CLEAR FORM ─── */
+  function clearForm() {
+    document.getElementById('predictionForm').reset();
+    document.getElementById('resultsWrapper').classList.add('result-hidden');
+    log('Form cleared');
+  }
+
+  /* ─── RENDER RESULTS ─── */
+  function showResults(data) {
+    const wrapper = document.getElementById('resultsWrapper');
+    const body    = document.getElementById('resultsBody');
+    wrapper.classList.remove('result-hidden');
+
+    if (!safeGet(data, 'success')) {
+      body.innerHTML = `<div class="error-box">⚠ ${safeGet(data, 'error', 'Unknown error')}</div>`;
+      return;
+    }
+
+    if (data.content) {
+      body.innerHTML = data.content;
+      return;
+    }
+
+    const preds   = safeGet(data, 'predictions', {});
+    const phiPred = safeGet(preds, 'PHI_predictions', {});
+    const swPred  = safeGet(preds, 'Sw_predictions', {});
+    const phiAvg  = safeGet(preds, 'PHI_average');
+    const swAvg   = safeGet(preds, 'Sw_average');
+
+    const renderBlock = (title, modelPreds, avg) => {
+      const rows = Object.entries(modelPreds).map(([m, v]) => `
+        <div class="metric-row">
+          <span class="metric-label">${m}</span>
+          <span class="metric-value">${v}</span>
+        </div>
+      `).join('');
+
+      const avgHtml = avg != null ? `
+        <div class="metric-avg">
+          <span class="avg-label">Ensemble Average</span>
+          <span class="avg-val">${avg}</span>
+        </div>
+      ` : '';
+
+      return `
+        <div class="result-block">
+          <div class="result-block-title">${title}</div>
+          ${rows}
+          ${avgHtml}
+        </div>
+      `;
+    };
+
+    body.innerHTML = `
+      <div class="success-badge">
+        <span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;box-shadow:0 0 6px var(--green)"></span>
+        Prediction complete
+      </div>
+      ${renderBlock('Porosity (PHI)', phiPred, phiAvg)}
+      ${renderBlock('Water Saturation (Sw)', swPred, swAvg)}
+    `;
+  }
+
+  /* ─── FORM SUBMIT ─── */
+  document.getElementById('predictionForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('predictBtn');
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> Running...`;
+    log('Submitting prediction request...');
+
+    try {
+      const raw = new FormData(this);
+      const payload = {};
+      for (const [k, v] of raw.entries()) {
+        if (v === '') throw new Error(`${k} is required`);
+        payload[k] = parseFloat(v);
+        if (isNaN(payload[k])) throw new Error(`${k} must be a number`);
+      }
+
+      log('POST /api/predict — ' + JSON.stringify(payload));
+      const res    = await fetch('/api/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const result = await res.json();
+      log('Response received');
+
+      if (res.ok) {
+        showResults(result);
+        log('Prediction successful');
+      } else {
+        throw new Error(safeGet(result, 'error', 'Server error'));
+      }
+    } catch (err) {
+      log('Error: ' + err.message, 'err');
+      showResults({ success: false, error: err.message });
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Run Prediction';
+    }
+  });
+
+  /* ─── INIT ─── */
+  document.addEventListener('DOMContentLoaded', () => {
+    log('DOM ready — checking health...');
+    checkHealth();
+  });
+
+  window.addEventListener('error', e => log('Uncaught: ' + e.message, 'err'));
+  window.addEventListener('unhandledrejection', e => log('Promise rejection: ' + e.reason, 'err'));
+</script>
+</body>
+</html>
