@@ -6,6 +6,8 @@ from flask_cors import CORS
 import os
 import traceback
 import sys
+from download_models import download_models
+download_models()
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for API calls
@@ -565,60 +567,8 @@ def internal_error(error):
         'message': 'Check server console for detailed error information'
     }), 500
 
-if __name__ == '__main__':
-    print("\n" + "="*80)
-    print("🚀 FLASK APPLICATION STARTUP")
-    print("="*80)
-    
-    # Check dependencies
-    print("\n📦 CHECKING DEPENDENCIES:")
-    if not check_dependencies():
-        print("❌ Missing required libraries. Please install them first.")
-        print("Run: pip install flask pandas numpy flask-cors joblib")
-        sys.exit(1)
-    
-    # Load models
-    MODELS = load_models()
-    
-    # Startup summary
-    print("\n" + "="*80)
-    print("📊 STARTUP SUMMARY")
-    print("="*80)
-    
-    if MODELS is None:
-        print("❌ CRITICAL WARNING: No models loaded!")
-        print("   The application will start but predictions will fail.")
-        print("   Please ensure all .pkl files are in the same directory as app.py:")
-        print("   - best_model_knn_phi.pkl")
-        print("   - best_model_knn_sw.pkl")
-        print("   - best_model_rf_phi.pkl")
-        print("   - best_model_rf_sw.pkl")
-        print("   - best_model_xgb_phi.pkl")
-        print("   - best_model_xgb_sw.pkl")
-    else:
-        print("✅ APPLICATION READY!")
-        print(f"   Loaded {len(MODELS)} models: {list(MODELS.keys())}")
-        print(f"   Feature order: {MODEL_FEATURE_ORDER}")
-    
-    print("\n🌐 AVAILABLE ENDPOINTS:")
-    print("   - GET  http://localhost:8000/                 - Main web interface")
-    print("   - POST http://localhost:8000/api/predict      - Make predictions (JSON)")
-    print("   - GET  http://localhost:8000/api/health       - System health check")
-    print("   - GET  http://localhost:8000/api/model-info   - Model information")
-    print("   - GET  http://localhost:8000/api/debug        - Debug information")
-    
-    print("\n🔧 TESTING SUGGESTIONS:")
-    print("   1. Visit http://localhost:8000/api/health to check model status")
-    print("   2. Visit http://localhost:8000/api/debug for system information")
-    print("   3. Use the main interface at http://localhost:8000")
-    
-    print("="*80)
-    print("🚀 Starting Flask development server...")
-    print("   Host: 0.0.0.0 (accessible from other devices)")
-    print("   Port: 8000")
-    print("   Debug: True")
-    print("="*80)
-    
+MODELS = load_models()
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8000))
     app.run(debug=False, host='0.0.0.0', port=port)
